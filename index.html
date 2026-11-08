@@ -1,0 +1,445 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<title>NEON WARRIOR</title>
+
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #050510;
+    color: white;
+    font-family: Arial;
+    text-align: center;
+    overflow: hidden;
+}
+
+h1 {
+    color: #00ffff;
+    text-shadow: 0 0 20px cyan;
+    padding: 12px;
+    letter-spacing: 5px;
+}
+
+#hud {
+    display: flex;
+    justify-content: space-around;
+    padding: 12px;
+    color: #00ffff;
+    font-size: 18px;
+}
+
+canvas {
+    display: block;
+    margin: auto;
+    background: #09091a;
+    border: 2px solid #00ffff;
+    box-shadow: 0 0 25px #00ffff55;
+    max-width: 100%;
+}
+
+#message {
+    position: absolute;
+    top: 45%;
+    left: 0;
+    width: 100%;
+    font-size: 30px;
+    color: #00ffff;
+    text-shadow: 0 0 20px cyan;
+    pointer-events: none;
+}
+
+button {
+    background: #00ffff;
+    color: black;
+    border: none;
+    padding: 12px 25px;
+    margin: 10px;
+    font-weight: bold;
+    cursor: pointer;
+    border-radius: 8px;
+    font-size: 16px;
+}
+
+button:hover {
+    background: white;
+    box-shadow: 0 0 20px cyan;
+}
+
+</style>
+</head>
+
+<body>
+
+<h1>⚡ NEON WARRIOR ⚡</h1>
+
+<div id="hud">
+    <span>❤️ HP: <b id="hp">100</b></span>
+    <span>⭐ SCORE: <b id="score">0</b></span>
+    <span>🌊 WAVE: <b id="wave">1</b></span>
+</div>
+
+<canvas id="game" width="900" height="550"></canvas>
+
+<div id="message">PRESS START TO PLAY</div>
+
+<button onclick="startGame()">START GAME</button>
+<button onclick="dash()">⚡ DASH</button>
+
+<p style="color:#aaa; padding:10px">
+    WASD / ARROW KEYS = MOVE |
+    SPACE = DASH |
+    SURVIVE THE ENEMY WAVES!
+</p>
+
+<script>
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+let player;
+let enemies = [];
+let bullets = [];
+let particles = [];
+let keys = {};
+
+let score = 0;
+let wave = 1;
+let running = false;
+let gameOver = false;
+let spawnTimer = 0;
+let frame = 0;
+
+document.addEventListener("keydown", e => {
+    keys[e.key.toLowerCase()] = true;
+
+    if(e.key === " ") {
+        e.preventDefault();
+        dash();
+    }
+});
+
+document.addEventListener("keyup", e => {
+    keys[e.key.toLowerCase()] = false;
+});
+
+function startGame() {
+
+    player = {
+        x: 450,
+        y: 275,
+        hp: 100,
+        speed: 4,
+        dash: 0,
+        cooldown: 0
+    };
+
+    enemies = [];
+    bullets = [];
+    particles = [];
+
+    score = 0;
+    wave = 1;
+    spawnTimer = 0;
+    frame = 0;
+
+    gameOver = false;
+    running = true;
+
+    document.getElementById("message").innerText = "";
+
+    requestAnimationFrame(loop);
+}
+
+function dash() {
+
+    if(!running || !player || player.dash > 0) return;
+
+    player.dash = 12;
+    player.cooldown = 100;
+}
+
+function spawnEnemy() {
+
+    let side = Math.floor(Math.random() * 4);
+
+    let x = side === 0 ? 0 :
+            side === 1 ? 900 :
+            Math.random() * 900;
+
+    let y = side === 2 ? 0 :
+            side === 3 ? 550 :
+            Math.random() * 550;
+
+    enemies.push({
+        x: x,
+        y: y,
+        hp: 2 + wave * 0.4,
+        speed: 1 + Math.random() * 0.8 + wave * 0.12,
+        size: 15 + Math.random() * 10,
+        color: Math.random() > 0.5 ? "#ff236c" : "#a855f7"
+    });
+}
+
+function explosion(x, y, color) {
+
+    for(let i = 0; i < 15; i++) {
+
+        particles.push({
+            x: x,
+            y: y,
+            vx: (Math.random() - 0.5) * 8,
+            vy: (Math.random() - 0.5) * 8,
+            life: 30,
+            color: color
+        });
+    }
+}
+
+function attack() {
+
+    if(enemies.length === 0) return;
+
+    let target = enemies[0];
+    let closest = Infinity;
+
+    for(let enemy of enemies) {
+
+        let d = Math.hypot(
+            enemy.x - player.x,
+            enemy.y - player.y
+        );
+
+        if(d < closest) {
+            closest = d;
+            target = enemy;
+        }
+    }
+
+    let angle = Math.atan2(
+        target.y - player.y,
+        target.x - player.x
+    );
+
+    bullets.push({
+        x: player.x,
+        y: player.y,
+        vx: Math.cos(angle) * 9,
+        vy: Math.sin(angle) * 9,
+        life: 60
+    });
+}
+
+function update() {
+
+    frame++;
+
+    let speed = player.dash > 0 ? 11 : player.speed;
+
+    if(keys["w"] || keys["arrowup"]) player.y -= speed;
+    if(keys["s"] || keys["arrowdown"]) player.y += speed;
+    if(keys["a"] || keys["arrowleft"]) player.x -= speed;
+    if(keys["d"] || keys["arrowright"]) player.x += speed;
+
+    player.x = Math.max(15, Math.min(885, player.x));
+    player.y = Math.max(15, Math.min(535, player.y));
+
+    if(player.dash > 0) player.dash--;
+
+    if(player.cooldown > 0) player.cooldown--;
+
+    spawnTimer++;
+
+    if(spawnTimer > Math.max(15, 65 - wave * 4)) {
+        spawnEnemy();
+        spawnTimer = 0;
+    }
+
+    if(score >= wave * 100) wave++;
+
+    if(frame % 25 === 0) attack();
+
+    bullets.forEach(b => {
+        b.x += b.vx;
+        b.y += b.vy;
+        b.life--;
+    });
+
+    bullets = bullets.filter(b => b.life > 0);
+
+    enemies.forEach(enemy => {
+
+        let angle = Math.atan2(
+            player.y - enemy.y,
+            player.x - enemy.x
+        );
+
+        enemy.x += Math.cos(angle) * enemy.speed;
+        enemy.y += Math.sin(angle) * enemy.speed;
+
+        if(Math.hypot(
+            enemy.x - player.x,
+            enemy.y - player.y
+        ) < enemy.size + 13) {
+
+            if(player.dash <= 0 && frame % 20 === 0) {
+                player.hp -= 5;
+                explosion(player.x, player.y, "#ff236c");
+            }
+        }
+    });
+
+    bullets.forEach(b => {
+
+        enemies.forEach(enemy => {
+
+            if(enemy.hp > 0 &&
+            Math.hypot(enemy.x-b.x, enemy.y-b.y) < enemy.size+6) {
+
+                enemy.hp--;
+                b.life = 0;
+
+                explosion(enemy.x, enemy.y, enemy.color);
+
+                if(enemy.hp <= 0) {
+                    score += 10;
+                }
+            }
+        });
+    });
+
+    enemies = enemies.filter(e => e.hp > 0);
+
+    particles.forEach(p => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life--;
+    });
+
+    particles = particles.filter(p => p.life > 0);
+
+    document.getElementById("hp").innerText = Math.max(0, player.hp);
+    document.getElementById("score").innerText = score;
+    document.getElementById("wave").innerText = wave;
+
+    if(player.hp <= 0) {
+        running = false;
+        gameOver = true;
+        document.getElementById("message").innerText =
+            "GAME OVER! SCORE: " + score;
+    }
+}
+
+function drawGrid() {
+
+    ctx.strokeStyle = "#171735";
+    ctx.lineWidth = 1;
+
+    for(let x = 0; x < 900; x += 40) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, 550);
+        ctx.stroke();
+    }
+
+    for(let y = 0; y < 550; y += 40) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(900, y);
+        ctx.stroke();
+    }
+}
+
+function glowCircle(x,y,r,color) {
+
+    ctx.shadowBlur = 25;
+    ctx.shadowColor = color;
+    ctx.fillStyle = color;
+
+    ctx.beginPath();
+    ctx.arc(x,y,r,0,Math.PI*2);
+    ctx.fill();
+
+    ctx.shadowBlur = 0;
+}
+
+function draw() {
+
+    ctx.clearRect(0,0,900,550);
+
+    drawGrid();
+
+    // Player
+
+    if(player) {
+
+        glowCircle(
+            player.x,
+            player.y,
+            15,
+            "#00ffff"
+        );
+
+        ctx.fillStyle = "white";
+        ctx.beginPath();
+        ctx.arc(player.x,player.y,5,0,Math.PI*2);
+        ctx.fill();
+    }
+
+    // Enemies
+
+    enemies.forEach(e => {
+
+        glowCircle(
+            e.x,
+            e.y,
+            e.size,
+            e.color
+        );
+
+        ctx.fillStyle = "white";
+
+        ctx.beginPath();
+        ctx.arc(e.x,e.y,4,0,Math.PI*2);
+        ctx.fill();
+    });
+
+    // Energy bullets
+
+    bullets.forEach(b => {
+        glowCircle(b.x,b.y,5,"#ffff00");
+    });
+
+    // Explosions
+
+    particles.forEach(p => {
+
+        ctx.globalAlpha = p.life / 30;
+
+        glowCircle(p.x,p.y,3,p.color);
+
+        ctx.globalAlpha = 1;
+    });
+}
+
+function loop() {
+
+    if(!running) return;
+
+    update();
+    draw();
+
+    requestAnimationFrame(loop);
+}
+
+draw();
+
+</script>
+
+</body>
+</html>
